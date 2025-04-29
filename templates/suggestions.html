@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container mt-4">
+    <h2 class="mb-4">AI-Powered Investment Plan</h2>
+
+    {% if suggestions and suggestions|length > 0 %}
+        <div id="chart-data" data-configs='{{ suggestions | tojson | safe }}'></div>
+
+        {% for section in suggestions %}
+        <div class="card mb-5 shadow-sm">
+            <div class="card-header bg-info text-white">
+                <h4>{{ section.heading }}</h4>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-7">
+                        {% for item in section.subsections %}
+                            <h5 class="fw-bold">{{ item.title }}</h5>
+                            <p>{{ item.content | safe }}</p>
+                        {% endfor %}
+                    </div>
+                    <div class="col-md-5 d-flex justify-content-center align-items-center">
+                        <div class="chart-holder w-100 text-center"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    {% else %}
+        <div class="alert alert-warning">
+            No investment suggestions available.
+        </div>
+    {% endif %}
+
+    <a href="{{ url_for('dashboard') }}" class="btn btn-outline-primary">← Back to Dashboard</a>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+{% raw %}
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    const chartDataDiv = document.getElementById("chart-data");
+    const suggestions = JSON.parse(chartDataDiv.dataset.configs);
+    const chartHolders = document.querySelectorAll(".chart-holder");
+
+    suggestions.forEach((section, index) => {
+        const labels = section.chart_labels || [];
+        const data = section.chart_data || [];
+        const canvas = document.createElement("canvas");
+        canvas.id = `chart-${index + 1}`;
+        canvas.height = 300;
+
+        chartHolders[index].appendChild(canvas);
+        const ctx = canvas.getContext("2d");
+        new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: labels,
+                datasets: [{
+                    data: data,
+                    backgroundColor: ['#007bff', '#ffc107', '#28a745', '#dc3545', '#6f42c1', '#20c997']
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    title: {
+                        display: true,
+                        text: section.heading
+                    },
+                    legend: {
+                        position: 'bottom'
+                    }
+                }
+            }
+        });
+    });
+});
+</script>
+{% endraw %}
+{% endblock %}

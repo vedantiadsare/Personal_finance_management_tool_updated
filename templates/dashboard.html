@@ -1,0 +1,785 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Personal Finance Manager{% endblock %}
+
+{% block extra_css %}
+<style>
+    .dashboard-icon {
+        width: 48px;
+        height: 48px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 1rem;
+    }
+
+    .income-card {
+    background-color: #a8e6cf; /* Pastel Green */
+    color: #333; /* Black text */
+    }
+
+    /* Total Expenses Card */
+.expense-card {
+    background-color: #ec9e90; /* Pastel Orange */
+    color: #333; /* Black text */
+    }
+
+/* Current Balance Card */
+.balance-card {
+    background-color: #f392e2; /* Pastel Yellow */
+    color: #333; /* Black text */
+    }
+
+/* Monthly Savings Card */
+.savings-card {
+    background-color: #cfa6f0; /* Pastel Light Yellow */
+    color: #333; /* Black text */
+    }
+    
+    .dashboard-icon i {
+        font-size: 1.5rem;
+    }
+    
+    .chart-container {
+        position: relative;
+        height: 250px;
+        width: 100%;
+        margin-bottom: 1rem;
+    }
+    
+    .transaction-date {
+        white-space: nowrap;
+    }
+    
+    .category-badge {
+        font-size: 0.8rem;
+    }
+
+    .chart-card {
+        height: 100%;
+        margin-bottom: 1.5rem;
+        border: none;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        transition: transform 0.3s ease;
+    }
+
+    .chart-card:hover {
+        transform: translateY(-5px);
+    }
+
+    .chart-card .card-body {
+        display: flex;
+        flex-direction: column;
+        padding: 1.5rem;
+        height: 400px;
+    }
+
+    .chart-wrapper {
+        position: relative;
+        height: 350px;
+        width: 100%;
+        margin-bottom: 1rem;
+    }
+    
+    .card-title {
+        font-size: 1.1rem;
+        margin-bottom: 0.75rem;
+        color: #2c3e50;
+        font-weight: 600;
+    }
+    
+    .card-body {
+        padding: 1.5rem !important;
+    }
+
+    .table-container {
+        position: relative;
+        max-height: 400px;
+        overflow-y: auto;
+        border-radius: 12px;
+        background: linear-gradient(to right, rgba(248, 250, 252, 0.8), rgba(241, 245, 249, 0.8));
+    }
+
+    .table-responsive {
+        max-height: 400px;
+        overflow-y: auto;
+        border-radius: 12px;
+        background: white;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+    }
+
+    .transactions-wrapper {
+        position: relative;
+        max-height: 400px;
+        overflow: hidden;
+        border-radius: 12px;
+        background: white;
+    }
+
+    .transactions-scroll {
+        max-height: 400px;
+        overflow-y: auto;
+        padding-top: 56px; /* Height of the header */
+    }
+
+    .transactions-table {
+        width: 100%;
+        border-collapse: separate;
+        border-spacing: 0;
+        margin: 0;
+        background: white;
+        border-radius: 12px;
+        overflow: hidden;
+    }
+
+    .transactions-table thead {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        background: linear-gradient(135deg, rgba(39, 87, 166, 0.95), rgba(52, 83, 239, 0.902));
+    }
+
+    .transactions-table thead th {
+        padding: 1rem 1.5rem;
+        color: #e2e4e9;
+        font-weight: 700;
+        font-size: 0.95rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        border: none;
+        white-space: nowrap;
+        background: transparent;
+        text-align: left;
+    }
+
+    .transactions-table thead th:first-child {
+        padding-left: 2rem;
+    }
+
+    .transactions-table thead th:last-child {
+        padding-right: 2rem;
+        text-align: right;
+    }
+
+    .transactions-table tbody tr {
+        transition: all 0.2s ease;
+    }
+
+    .transactions-table tbody tr:nth-child(even) {
+        background: rgba(243, 244, 246, 0.5);
+    }
+
+    .transactions-table tbody tr:hover {
+        background: rgba(255, 255, 255, 1);
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.05);
+    }
+
+    .transactions-table td {
+        padding: 1rem 1.5rem;
+        border: none;
+        vertical-align: middle;
+    }
+
+    .transactions-table td:first-child {
+        padding-left: 2rem;
+    }
+
+    .transactions-table td:last-child {
+        padding-right: 2rem;
+        text-align: right;
+    }
+
+    .date-cell {
+        color: #6b7280;
+        font-size: 0.95rem;
+        font-weight: 500;
+        white-space: nowrap;
+    }
+
+    .description-cell {
+        color: #111827;
+        font-weight: 500;
+        font-size: 0.95rem;
+    }
+
+    .category-cell {
+        display: inline-block;
+        padding: 0.4rem 1rem;
+        border-radius: 20px;
+        font-size: 0.85rem;
+        font-weight: 600;
+        text-align: center;
+        min-width: 120px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    }
+
+    .amount-expense {
+        color: #dc2626;
+        font-weight: 600;
+        font-size: 0.95rem;
+    }
+
+    .amount-income {
+        color: #059669;
+        font-weight: 600;
+        font-size: 0.95rem;
+    }
+
+    /* Custom scrollbar */
+    .table-responsive::-webkit-scrollbar {
+        width: 6px;
+    }
+
+    .table-responsive::-webkit-scrollbar-track {
+        background: transparent;
+    }
+
+    .table-responsive::-webkit-scrollbar-thumb {
+        background: rgba(156, 163, 175, 0.5);
+        border-radius: 3px;
+    }
+
+    .table-responsive::-webkit-scrollbar-thumb:hover {
+        background: rgba(156, 163, 175, 0.7);
+    }
+/* Income Category Badge */
+.category-income {
+    background-color: rgba(34, 197, 94, 0.2) !important;
+    color: #15803d !important;
+}
+
+/* Expense Category Badge */
+.category-expense {
+    background-color: rgba(239, 68, 68, 0.2) !important;
+    color: #991b1b !important;
+}
+
+    .transactions-table .category-cell:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 3px 6px rgba(0, 0, 0, 0.1);
+    }
+
+    .financial-advice {
+        background: linear-gradient(135deg, #6B73FF 0%, #000DFF 100%);
+        color: white;
+        padding: 1.5rem;
+        border-radius: 10px;
+        margin-bottom: 1.5rem;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-3">
+    <h1 class="mb-4">Financial Dashboard</h1>
+    
+    <!-- Summary Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card summary-card income-card">
+                <div class="card-body">
+                    <h5 class="card-title">Total Income</h5>
+                    <h3 class="card-text">₹{{ "%.2f"|format(totals.total_income or 0) }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card summary-card expense-card">
+                <div class="card-body">
+                    <h5 class="card-title">Total Expenses</h5>
+                    <h3 class="card-text">₹{{ "%.2f"|format(totals.total_expenses or 0) }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card summary-card balance-card">
+                <div class="card-body">
+                    <h5 class="card-title">Current Balance</h5>
+                    <h3 class="card-text">₹{{ "%.2f"|format((totals.total_income or 0) - (totals.total_expenses or 0)) }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card summary-card savings-card">
+                <div class="card-body">
+                    <h5 class="card-title">Monthly Savings</h5>
+                    <h3 class="card-text">₹{{ "%.2f"|format(monthly_savings or 0) }}</h3>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Financial Advice Section -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="financial-advice">
+                <h5><i class="fas fa-lightbulb me-2"></i>Financial Insights & Advice</h5>
+                {% set savings_rate = ((totals.total_income or 0) - (totals.total_expenses or 0)) / (totals.total_income or 1) * 100 %}
+                {% set highest_expense = expense_categories|sort(attribute='total')|last if expense_categories else None %}
+                
+                <div class="advice-item">
+                    {% if savings_rate >= 20 %}
+                        Great job! You're saving {{ "%.1f"|format(savings_rate) }}% of your income, which is above the recommended 20% savings rate.
+                    {% elif savings_rate >= 0 %}
+                        You're saving {{ "%.1f"|format(savings_rate) }}% of your income. Try to increase this to 20% for better financial security.
+                    {% else %}
+                        Your expenses exceed your income. Consider reviewing your budget to reduce spending.
+                    {% endif %}
+                </div>
+
+                {% if highest_expense %}
+                    <div class="advice-item">
+                        Your highest expense category is {{ highest_expense.name }} (₹{{ "%.2f"|format(highest_expense.total) }}). 
+                        Consider if this aligns with your financial priorities.
+                    </div>
+                {% endif %}
+
+                {% if monthly_savings < 0 %}
+                    <div class="advice-item">
+                        Your monthly savings are negative. Focus on reducing expenses or increasing income to improve your financial health.
+                    </div>
+                {% endif %}
+
+                {% if expense_categories|length > 5 %}
+                    <div class="advice-item">
+                        You have {{ expense_categories|length }} expense categories. Consider consolidating similar categories to simplify your budget.
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <!-- Charts Row 1 -->
+    <div class="row mb-4">
+        <!-- Income vs Expenses Trend -->
+        <div class="col-md-6">
+            <div class="card chart-card">
+                <div class="card-body">
+                    <h5 class="card-title">Income vs Expenses Trend</h5>
+                    <div class="chart-wrapper">
+                        <canvas id="trendChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- Expense Categories Pie Chart -->
+        <div class="col-md-6">
+            <div class="card chart-card">
+                <div class="card-body">
+                    <h5 class="card-title">Expense Categories</h5>
+                    <div class="chart-wrapper">
+                        <canvas id="expensePieChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Budget Goals and Payment Method Distribution Graphs (Side by Side, Equal Size) -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card chart-card">
+                <div class="card-body">
+                    <h5 class="card-title">Payment Method Distribution</h5>
+                    <div class="chart-wrapper">
+                        <canvas id="paymentMethodChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card chart-card">
+                <div class="card-body">
+                    <h5 class="card-title">Budget Goals Progress</h5>
+                    <div class="chart-wrapper">
+                        <canvas id="budgetGoalsChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Transactions -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card chart-card">
+                <div class="card-body">
+                    <h5 class="card-title">Recent Transactions</h5>
+                    <div class="table-responsive">
+                        <table class="table transactions-table">
+                            <thead>
+                                <tr>
+                                    <th style="width: 15%">Date</th>
+                                    <th style="width: 35%">Description</th>
+                                    <th style="width: 30%">Category</th>
+                                    <th style="width: 20%">Amount</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for transaction in recent_transactions %}
+                                <tr>
+                                    <td class="date-cell">{{ transaction.date.strftime('%Y-%m-%d') if transaction.date is not string else transaction.date }}</td>
+                                    <td class="description-cell">{{ transaction.description }}</td>
+                                    <td>
+                                        <span class="category-cell {% if transaction.category_type == 'income' %}category-income{% else %}category-expense{% endif %}">
+                                            {{ transaction.category_name }}
+                                        </span>
+                                    </td>
+                                    <td class="{% if transaction.category_type == 'income' %}amount-income{% else %}amount-expense{% endif %}">
+                                        ₹{{ "%.2f"|format(transaction.amount|abs) }}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Get data from Flask template
+        const monthlyData = JSON.parse('{{ monthly_data|tojson|safe }}');
+        const expenseCategories = JSON.parse('{{ expense_categories|tojson|safe }}');
+        const incomeCategories = JSON.parse('{{ income_categories|tojson|safe }}');
+        const paymentMethodStats = JSON.parse('{{ payment_method_stats|tojson|safe }}');
+        const budgetCategories = JSON.parse('{{ categories|tojson|safe }}');
+        const filteredBudgetCategories = budgetCategories.filter(c => c.target_amount > 0);
+        
+        // Common chart options
+        const commonOptions = {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: {
+                duration: 2000,
+                easing: 'easeInOutQuart'
+            },
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: {
+                        padding: 20,
+                        font: {
+                            size: 12
+                        }
+                    }
+                }
+            }
+        };
+
+        // Initialize all charts
+        initializeCharts();
+
+        function initializeCharts() {
+            // Income vs Expenses Trend Chart
+            const trendCtx = document.getElementById('trendChart');
+            if (trendCtx) {
+                const ctx = trendCtx.getContext('2d');
+                new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: monthlyData.map(d => d.month),
+                        datasets: [
+                            {
+                                label: 'Income',
+                                data: monthlyData.map(d => d.income || 0),
+                                backgroundColor: 'rgba(40, 167, 69, 0.8)',
+                                borderColor: 'rgb(40, 167, 69)',
+                                borderWidth: 1,
+                                borderRadius: 5,
+                                barPercentage: 0.4,
+                                categoryPercentage: 0.8
+                            },
+                            {
+                                label: 'Expenses',
+                                data: monthlyData.map(d => d.expenses || 0),
+                                backgroundColor: 'rgba(220, 53, 69, 0.8)',
+                                borderColor: 'rgb(220, 53, 69)',
+                                borderWidth: 1,
+                                borderRadius: 5,
+                                barPercentage: 0.4,
+                                categoryPercentage: 0.8
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                grid: {
+                                    color: 'rgba(0, 0, 0, 0.1)',
+                                    drawBorder: false
+                                },
+                                ticks: {
+                                    callback: function(value) {
+                                        return '₹' + value.toLocaleString();
+                                    },
+                                    padding: 10
+                                }
+                            },
+                            x: {
+                                grid: {
+                                    display: false
+                                },
+                                ticks: {
+                                    padding: 10
+                                }
+                            }
+                        },
+                        plugins: {
+                            legend: {
+                                position: 'top',
+                                labels: {
+                                    padding: 20,
+                                    font: {
+                                        size: 12
+                                    }
+                                }
+                            },
+                            tooltip: {
+                                backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                                titleColor: '#fff',
+                                titleFont: {
+                                    size: 14,
+                                    weight: 'bold'
+                                },
+                                bodyFont: {
+                                    size: 13
+                                },
+                                padding: 12,
+                                callbacks: {
+                                    label: function(context) {
+                                        return context.dataset.label + ': ₹' + context.raw.toLocaleString();
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+
+            // Expense Categories Pie Chart
+            const pieCtx = document.getElementById('expensePieChart');
+            if (pieCtx) {
+                const ctx = pieCtx.getContext('2d');
+                new Chart(ctx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: expenseCategories.map(c => `${c.name} (${c.percentage}%)`),
+                        datasets: [{
+                            data: expenseCategories.map(c => c.total || 0),
+                            backgroundColor: [
+                                'rgba(255, 99, 132, 0.8)',
+                                'rgba(54, 162, 235, 0.8)',
+                                'rgba(255, 206, 86, 0.8)',
+                                'rgba(75, 192, 192, 0.8)',
+                                'rgba(153, 102, 255, 0.8)',
+                                'rgba(255, 159, 64, 0.8)',
+                                'rgba(199, 199, 199, 0.8)',
+                                'rgba(83, 102, 255, 0.8)',
+                                'rgba(255, 99, 132, 0.8)',
+                                'rgba(54, 162, 235, 0.8)'
+                            ],
+                            borderColor: [
+                                'rgb(255, 99, 132)',
+                                'rgb(54, 162, 235)',
+                                'rgb(255, 206, 86)',
+                                'rgb(75, 192, 192)',
+                                'rgb(153, 102, 255)',
+                                'rgb(255, 159, 64)',
+                                'rgb(199, 199, 199)',
+                                'rgb(83, 102, 255)',
+                                'rgb(255, 99, 132)',
+                                'rgb(54, 162, 235)'
+                            ],
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                position: 'right',
+                                align: 'center',
+                                labels: {
+                                    padding: 10,
+                                    boxWidth: 15
+                                }
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        const value = context.raw || 0;
+                                        const percentage = expenseCategories[context.dataIndex].percentage || 0;
+                                        return `${expenseCategories[context.dataIndex].name}: ₹${value.toLocaleString()} (${percentage}%)`;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+
+            // Budget Goals Progress Chart
+            const budgetCtx = document.getElementById('budgetGoalsChart');
+            if (budgetCtx) {
+                const ctx = budgetCtx.getContext('2d');
+                new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: filteredBudgetCategories.map(c => c.name),
+                        datasets: [{
+                            label: 'Current Spending',
+                            data: filteredBudgetCategories.map(c => c.spent),
+                            backgroundColor: 'rgba(255, 99, 132, 0.7)',
+                            borderColor: 'rgb(255, 99, 132)',
+                            borderWidth: 1,
+                            borderRadius: 5
+                        },
+                        {
+                            label: 'Budget Target',
+                            data: filteredBudgetCategories.map(c => c.target_amount),
+                            backgroundColor: 'rgba(54, 162, 235, 0.7)',
+                            borderColor: 'rgb(54, 162, 235)',
+                            borderWidth: 1,
+                            borderRadius: 5
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                grid: {
+                                    color: 'rgba(0, 0, 0, 0.1)'
+                                },
+                                ticks: {
+                                    callback: function(value) {
+                                        return '₹' + value.toLocaleString();
+                                    }
+                                }
+                            },
+                            x: {
+                                grid: {
+                                    display: false
+                                }
+                            }
+                        },
+                        plugins: {
+                            legend: {
+                                display: true,
+                                position: 'top',
+                                labels: {
+                                    padding: 20,
+                                    font: {
+                                        size: 12
+                                    }
+                                }
+                            },
+                            tooltip: {
+                                enabled: true,
+                                callbacks: {
+                                    label: function(context) {
+                                        return context.dataset.label + ': ₹' + context.raw.toLocaleString();
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+
+            // Payment Method Distribution Chart
+            const paymentMethodCtx = document.getElementById('paymentMethodChart');
+            if (paymentMethodCtx) {
+                const ctx = paymentMethodCtx.getContext('2d');
+                const labels = paymentMethodStats.map(pm => pm.payment_method || 'Other');
+                const data = paymentMethodStats.map(pm => pm.count);
+                new Chart(ctx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            data: data,
+                            backgroundColor: [
+                                'rgba(255, 205, 86, 0.8)',
+                                'rgba(54, 162, 235, 0.8)',
+                                'rgba(255, 99, 132, 0.8)'
+                            ],
+                            borderColor: [
+                                'rgb(255, 205, 86)',
+                                'rgb(54, 162, 235)',
+                                'rgb(255, 99, 132)'
+                            ],
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                position: 'right',
+                                labels: {
+                                    padding: 20,
+                                    font: {
+                                        size: 12
+                                    },
+                                    generateLabels: function(chart) {
+                                        const data = chart.data.datasets[0].data;
+                                        const total = data.reduce((a, b) => a + b, 0);
+                                        return chart.data.labels.map((label, i) => {
+                                            const value = data[i];
+                                            const percent = total ? ((value / total) * 100).toFixed(1) : 0;
+                                            return {
+                                                text: `${label} (${percent}%)`,
+                                                fillStyle: chart.data.datasets[0].backgroundColor[i],
+                                                strokeStyle: chart.data.datasets[0].borderColor[i],
+                                                lineWidth: 1,
+                                                hidden: isNaN(data[i]) || chart.getDatasetMeta(0).data[i].hidden,
+                                                index: i
+                                            };
+                                        });
+                                    }
+                                }
+                            },
+                            tooltip: {
+                                backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                                titleColor: '#fff',
+                                titleFont: {
+                                    size: 14,
+                                    weight: 'bold'
+                                },
+                                bodyFont: {
+                                    size: 13
+                                },
+                                padding: 12,
+                                callbacks: {
+                                    label: function(context) {
+                                        const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                        const value = context.raw;
+                                        const percent = total ? ((value / total) * 100).toFixed(1) : 0;
+                                        return `${context.label}: ${percent}% (${value} transactions)`;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+        }
+    });
+</script>
+{% endblock %} 
