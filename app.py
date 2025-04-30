@@ -1504,6 +1504,62 @@ def suggestions():
         if connection:
             connection.close()
 
+@app.route('/api/transactions/search')
+@login_required
+def search_transactions():
+    connection = get_db_connection()
+    if not connection:
+        return jsonify({'error': 'Database connection error'}), 500
+
+    try:
+        cursor = connection.cursor(dictionary=True)
+        
+        # Get unified search query
+        search_query = request.args.get('query', '').strip()
+        
+        # Build the base query
+        query = '''
+            SELECT t.*, c.name as category_name, c.type as category_type
+            FROM transactions t
+            JOIN categories c ON t.category_id = c.id
+            WHERE t.user_id = %s
+        '''
+        params = [current_user.id]
+        
+        # Add search condition for unified search
+        if search_query:
+            query += ''' AND (
+                t.description LIKE %s 
+                OR c.name LIKE %s 
+                OR t.payment_method LIKE %s
+            )'''
+            search_pattern = f'%{search_query}%'
+            params.extend([search_pattern, search_pattern, search_pattern])
+        
+        # Add ordering
+        query += ' ORDER BY t.date DESC'
+        
+        # Execute the query
+        cursor.execute(query, tuple(params))
+        transactions = cursor.fetchall()
+        
+        # Convert decimal values to float for JSON serialization
+        for transaction in transactions:
+            if 'amount' in transaction:
+                transaction['amount'] = float(transaction['amount'])
+            if 'date' in transaction:
+                transaction['date'] = transaction['date'].strftime('%Y-%m-%d')
+        
+        return jsonify({'transactions': transactions})
+        
+    except Exception as e:
+        print(f"Error in search transactions: {str(e)}")
+        return jsonify({'error': 'Error searching transactions'}), 500
+    finally:
+        if 'cursor' in locals():
+            cursor.close()
+        if connection:
+            connection.close()
 
 if __name__ == '__main__':
     app.run(debug=True)
