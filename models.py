@@ -1,102 +1,182 @@
 from datetime import datetime
-from app import users_db, categories_db, transactions_db, Query
-import uuid
-
-def generate_id():
-    return str(uuid.uuid4())
+from database import get_db_connection
 
 class User:
     @staticmethod
     def create(username, email, password_hash):
-        user_id = generate_id()
-        user_data = {
-            'id': user_id,
-            'username': username,
-            'email': email,
-            'password_hash': password_hash,
-            'created_at': datetime.utcnow().isoformat()
-        }
-        users_db.insert(user_data)
-        return user_data
+        connection = get_db_connection()
+        cursor = connection.cursor()
+        try:
+            cursor.execute(
+                "INSERT INTO users (username, email, password_hash, created_at) VALUES (%s, %s, %s, %s)",
+                (username, email, password_hash, datetime.now())
+            )
+            connection.commit()
+            user_id = cursor.lastrowid
+            return {'id': user_id, 'username': username, 'email': email}
+        finally:
+            cursor.close()
+            connection.close()
 
     @staticmethod
     def get_by_id(user_id):
-        return users_db.get(Query().id == user_id)
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True)
+        try:
+            cursor.execute("SELECT * FROM users WHERE id = %s", (user_id,))
+            return cursor.fetchone()
+        finally:
+            cursor.close()
+            connection.close()
 
     @staticmethod
     def get_by_username(username):
-        return users_db.get(Query().username == username)
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True)
+        try:
+            cursor.execute("SELECT * FROM users WHERE username = %s", (username,))
+            return cursor.fetchone()
+        finally:
+            cursor.close()
+            connection.close()
 
     @staticmethod
     def get_by_email(email):
-        return users_db.get(Query().email == email)
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True)
+        try:
+            cursor.execute("SELECT * FROM users WHERE email = %s", (email,))
+            return cursor.fetchone()
+        finally:
+            cursor.close()
+            connection.close()
 
 class Category:
     @staticmethod
     def create(name, type, user_id):
-        category_id = generate_id()
-        category_data = {
-            'id': category_id,
-            'name': name,
-            'type': type,
-            'user_id': user_id
-        }
-        categories_db.insert(category_data)
-        return category_data
+        connection = get_db_connection()
+        cursor = connection.cursor()
+        try:
+            cursor.execute(
+                "INSERT INTO categories (name, type, user_id) VALUES (%s, %s, %s)",
+                (name, type, user_id)
+            )
+            connection.commit()
+            category_id = cursor.lastrowid
+            return {'id': category_id, 'name': name, 'type': type, 'user_id': user_id}
+        finally:
+            cursor.close()
+            connection.close()
 
     @staticmethod
     def get_by_user(user_id):
-        return categories_db.search(Query().user_id == user_id)
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True)
+        try:
+            cursor.execute("SELECT * FROM categories WHERE user_id = %s", (user_id,))
+            return cursor.fetchall()
+        finally:
+            cursor.close()
+            connection.close()
 
     @staticmethod
     def get_by_id(category_id):
-        return categories_db.get(Query().id == category_id)
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True)
+        try:
+            cursor.execute("SELECT * FROM categories WHERE id = %s", (category_id,))
+            return cursor.fetchone()
+        finally:
+            cursor.close()
+            connection.close()
 
 class Transaction:
     @staticmethod
     def create(amount, type, category_id, user_id, description='', date=None):
-        transaction_id = generate_id()
-        transaction_data = {
-            'id': transaction_id,
-            'amount': amount,
-            'description': description,
-            'date': date.isoformat() if date else datetime.utcnow().isoformat(),
-            'type': type,
-            'user_id': user_id,
-            'category_id': category_id,
-            'created_at': datetime.utcnow().isoformat()
-        }
-        transactions_db.insert(transaction_data)
-        return transaction_data
+        connection = get_db_connection()
+        cursor = connection.cursor()
+        try:
+            cursor.execute(
+                "INSERT INTO transactions (amount, type, category_id, user_id, description, date) VALUES (%s, %s, %s, %s, %s, %s)",
+                (amount, type, category_id, user_id, description, date or datetime.now())
+            )
+            connection.commit()
+            transaction_id = cursor.lastrowid
+            return {
+                'id': transaction_id,
+                'amount': amount,
+                'type': type,
+                'category_id': category_id,
+                'user_id': user_id,
+                'description': description,
+                'date': date or datetime.now()
+            }
+        finally:
+            cursor.close()
+            connection.close()
 
     @staticmethod
     def get_by_user(user_id):
-        return transactions_db.search(Query().user_id == user_id)
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True)
+        try:
+            cursor.execute("SELECT * FROM transactions WHERE user_id = %s", (user_id,))
+            return cursor.fetchall()
+        finally:
+            cursor.close()
+            connection.close()
 
     @staticmethod
     def get_by_id(transaction_id):
-        return transactions_db.get(Query().id == transaction_id)
+        connection = get_db_connection()
+        cursor = connection.cursor(dictionary=True)
+        try:
+            cursor.execute("SELECT * FROM transactions WHERE id = %s", (transaction_id,))
+            return cursor.fetchone()
+        finally:
+            cursor.close()
+            connection.close()
 
     @staticmethod
     def delete(transaction_id):
-        transactions_db.remove(Query().id == transaction_id)
+        connection = get_db_connection()
+        cursor = connection.cursor()
+        try:
+            cursor.execute("DELETE FROM transactions WHERE id = %s", (transaction_id,))
+            connection.commit()
+            return cursor.rowcount > 0
+        finally:
+            cursor.close()
+            connection.close()
 
     @staticmethod
     def get_summary(user_id, start_date=None, end_date=None):
-        query = Query().user_id == user_id
-        if start_date:
-            query = query & (Query().date >= start_date.isoformat())
-        if end_date:
-            query = query & (Query().date <= end_date.isoformat())
-        
-        transactions = transactions_db.search(query)
-        
-        total_income = sum(t['amount'] for t in transactions if t['type'] == 'income')
-        total_expense = sum(t['amount'] for t in transactions if t['type'] == 'expense')
-        balance = total_income - total_expense
-        
-        return {
-            'total_income': total_income,
-            'total_expense': total_expense,
-            'balance': balance
-        } 
+        connection = get_db_connection()
+        cursor = connection.cursor()
+        try:
+            query = "SELECT type, SUM(amount) as total FROM transactions WHERE user_id = %s"
+            params = [user_id]
+            
+            if start_date:
+                query += " AND date >= %s"
+                params.append(start_date)
+            if end_date:
+                query += " AND date <= %s"
+                params.append(end_date)
+                
+            query += " GROUP BY type"
+            cursor.execute(query, tuple(params))
+            results = cursor.fetchall()
+            
+            total_income = sum(row[1] for row in results if row[0] == 'income')
+            total_expense = sum(row[1] for row in results if row[0] == 'expense')
+            balance = total_income - total_expense
+            
+            return {
+                'total_income': total_income,
+                'total_expense': total_expense,
+                'balance': balance
+            }
+        finally:
+            cursor.close()
+            connection.close() 
