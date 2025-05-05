@@ -84,6 +84,18 @@
             color: #6c757d;
             font-size: 0.9rem;
         }
+        .hero-img {
+    border: 4px solid #ffffff;
+    border-radius: 1rem;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.hero-img:hover {
+    transform: scale(1.02);
+    box-shadow: 0 15px 40px rgba(0, 0, 0, 0.2);
+}
+
         
         /* Floating animation for icons */
         @keyframes float {
@@ -95,6 +107,10 @@
         .float-animation {
             animation: float 3s ease-in-out infinite;
         }
+        
+       
+        
+        
     </style>
     {% endif %}
     
@@ -171,7 +187,7 @@
                     <a href="{{ url_for('register_page') }}" class="btn btn-light btn-lg px-4 rounded-pill animate__animated animate__pulse animate__infinite animate__slower">Get Started</a>
                 </div>
                 <div class="col-md-6 animate__animated animate__fadeInRight">
-                    <img src="{{ url_for('static', filename='images/finance.jpg') }}" alt="Financial dashboard illustration" class="img-fluid rounded-3">
+                    <img src="{{ url_for('static', filename='images/finance.jpg') }}" alt="Financial dashboard illustration" class="img-fluid rounded-3 hero-img">
                 </div>
             </div>
         </div>
