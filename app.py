@@ -19,14 +19,14 @@ import dateparser
 import json
 import traceback
 
-# Load environment variables
+# Loading environment variables from .env file
 load_dotenv()
 
 app = Flask(__name__)
 
 # Configuration
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'your-secret-key-here')
-app.config['DATABASE'] = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'finance.db')
+
 
 # Initialize extensions
 bcrypt = Bcrypt(app)
@@ -53,7 +53,7 @@ def get_db_connection():
         print(f"Error connecting to MySQL: {e}")
         return None
 
-# Initialize database
+# Initializing database
 def init_db():
     try:
         connection = get_db_connection()
@@ -62,7 +62,7 @@ def init_db():
             
         cursor = connection.cursor()
         
-        # Create users table
+        # Creating users table 
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS users (
                 id INT AUTO_INCREMENT PRIMARY KEY,
@@ -73,7 +73,7 @@ def init_db():
             )
         ''')
         
-        # Create categories table
+        # Creating categories table
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS categories (
                 id INT AUTO_INCREMENT PRIMARY KEY,
@@ -85,7 +85,7 @@ def init_db():
             )
         ''')
         
-        # Create transactions table
+        # Creating transactions table
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS transactions (
                 id INT AUTO_INCREMENT PRIMARY KEY,
@@ -101,7 +101,7 @@ def init_db():
             )
         ''')
         
-        # Create budget_goals table
+        # Creating budget_goals table
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS budget_goals (
                 id INT AUTO_INCREMENT PRIMARY KEY,
@@ -157,12 +157,12 @@ def load_user(user_id):
                 connection.close()
     return None
 
-# Root route
+# Root route(index.html)
 @app.route('/')
 def index():
     return render_template('index.html')
 
-# Page routes
+# Page routes(login.html, register.html)
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if current_user.is_authenticated:
@@ -210,7 +210,7 @@ def register_page():
         password = request.form.get('password')
         confirm_password = request.form.get('confirm_password')
 
-        # Check password strength
+        # To Check password strength
         if len(password) < 8:
             flash('Password must be at least 8 characters long', 'danger')
             return render_template('register.html')
@@ -240,7 +240,7 @@ def register_page():
                     flash('Email already exists', 'danger')
                     return render_template('register.html')
 
-                # Create new user
+                # Creating new user
                 hashed_password = bcrypt.generate_password_hash(password).decode('utf-8')
                 cursor.execute(
                     "INSERT INTO users (username, email, password_hash, created_at) VALUES (%s, %s, %s, %s)",
@@ -305,6 +305,7 @@ def register_page():
 
     return render_template('register.html')
 
+# Transactions route(transactions.html)
 @app.route('/transactions', methods=['GET', 'POST'])
 @login_required
 def transactions():
@@ -359,73 +360,6 @@ def transactions():
                     VALUES (%s, %s, %s, %s, %s, %s)
                 ''', (amount, description, date, current_user.id, category_id, payment_method))
                 
-                # Check for budget alerts
-                cursor.execute('''
-                    SELECT bg.*, c.name as category_name
-                    FROM budget_goals bg
-                    JOIN categories c ON bg.category_id = c.id
-                    WHERE bg.category_id = %s AND bg.user_id = %s
-                ''', (category_id, current_user.id))
-                budget_goal = cursor.fetchone()
-                
-                if budget_goal:
-                    # Calculate total spending for the period
-                    if budget_goal['period'] == 'daily':
-                        date_filter = 'DATE(date) = DATE(%s)'
-                        date_params = (date,)
-                    elif budget_goal['period'] == 'weekly':
-                        date_filter = 'YEARWEEK(date) = YEARWEEK(%s)'
-                        date_params = (date,)
-                    elif budget_goal['period'] == 'monthly':
-                        date_filter = 'YEAR(date) = YEAR(%s) AND MONTH(date) = MONTH(%s)'
-                        date_params = (date, date)
-                    else:  # yearly
-                        date_filter = 'YEAR(date) = YEAR(%s)'
-                        date_params = (date,)
-                    
-                    cursor.execute(f'''
-                        SELECT COALESCE(SUM(amount), 0) as total_spent
-                        FROM transactions
-                        WHERE user_id = %s 
-                        AND category_id = %s
-                        AND {date_filter}
-                    ''', (current_user.id, category_id) + date_params)
-                    result = cursor.fetchone()
-                    total_spent = result['total_spent'] if result else 0
-                    
-                    # Calculate percentage
-                    percentage = (total_spent / budget_goal['target_amount']) * 100
-                    
-                    # Add budget notifications
-                    if percentage >= 90:
-                        messages_90 = [
-                            'Budget Alert: You have reached 90% of your budget limit. Please review your spending.',
-                            'Budget Warning: 90% of your allocated budget has been utilized. Consider adjusting your expenses.',
-                            'Budget Notification: Your spending has reached 90% of the budget threshold.',
-                            'Budget Alert: You are approaching your budget limit with 90% utilization.'
-                        ]
-                        if total_spent > budget_goal['target_amount']:
-                            amount_exceeded = total_spent - budget_goal['target_amount']
-                            flash(f'Budget Alert! {random.choice(messages_90)} You\'ve exceeded your {budget_goal["period"]} budget for {budget_goal["category_name"]} by ₹{amount_exceeded:.2f}!', 'budget')
-                        else:
-                            flash(f'Budget Alert! {random.choice(messages_90)} You\'ve used {percentage:.1f}% of your {budget_goal["period"]} budget for {budget_goal["category_name"]}!', 'budget')
-                    elif percentage >= 80:
-                        messages_80 = [
-                            'Budget Notice: You have utilized 80% of your budget. Please monitor your spending carefully.',
-                            'Budget Update: 80% of your budget has been spent. Consider reviewing your expenses.',
-                            'Budget Alert: Your spending has reached 80% of the allocated budget.',
-                            'Budget Warning: You are approaching 80% of your budget limit.'
-                        ]
-                        flash(f'Budget Alert! {random.choice(messages_80)} You\'ve used {percentage:.1f}% of your {budget_goal["period"]} budget for {budget_goal["category_name"]}!', 'budget')
-                    elif percentage >= 50:
-                        messages_50 = [
-                            'Budget Update: You have spent more than 50% of your allocated budget.',
-                            'Budget Notice: More than half of your budget has been utilized.',
-                            'Budget Status: You have crossed the halfway point of your budget.',
-                            'Budget Update: Spending is now above 50% of your budget.'
-                        ]
-                        flash(f'Budget Alert! {random.choice(messages_50)} You\'ve spent ₹{total_spent:.2f} out of ₹{budget_goal["target_amount"]:.2f} for {budget_goal["category_name"]}', 'budget')
-                
                 connection.commit()
                 flash('Transaction added successfully!', 'success')
                 return redirect(url_for('transactions'))
@@ -465,71 +399,8 @@ def transactions():
         if connection:
             connection.close()
 
-@app.route('/notifications')
-@login_required
-def notifications():
-    connection = get_db_connection()
-    if not connection:
-        flash('Database connection error', 'danger')
-        return redirect(url_for('index'))
-    
-    try:
-        cursor = connection.cursor(dictionary=True)
-        
-        # Get all notifications for the user
-        cursor.execute("""
-            SELECT * FROM notifications
-            WHERE user_id = %s
-            ORDER BY created_at DESC
-        """, (current_user.id,))
-        notifications_list = cursor.fetchall()
-        
-        # Mark all notifications as read
-        cursor.execute("""
-            UPDATE notifications
-            SET is_read = TRUE
-            WHERE user_id = %s AND is_read = FALSE
-        """, (current_user.id,))
-        connection.commit()
-        
-        return render_template('notifications.html', notifications=notifications_list)
-    
-    except Exception as e:
-        print(f"Error in notifications page: {e}")
-        flash('Error loading notifications', 'danger')
-        return redirect(url_for('index'))
-    finally:
-        if 'cursor' in locals():
-            cursor.close()
-        if connection:
-            connection.close()
 
-@app.route('/api/notifications/unread-count')
-@login_required
-def unread_notifications_count():
-    connection = get_db_connection()
-    if not connection:
-        return jsonify({'count': 0})
-    
-    try:
-        cursor = connection.cursor(dictionary=True)
-        cursor.execute("""
-            SELECT COUNT(*) as count
-            FROM notifications
-            WHERE user_id = %s AND is_read = FALSE
-        """, (current_user.id,))
-        result = cursor.fetchone()
-        return jsonify({'count': result['count']})
-    
-    except Exception as e:
-        print(f"Error getting unread notifications count: {e}")
-        return jsonify({'count': 0})
-    finally:
-        if 'cursor' in locals():
-            cursor.close()
-        if connection:
-            connection.close()
-
+# API routes(transactions.html)
 @app.route('/api/transactions/<int:transaction_id>', methods=['GET', 'DELETE', 'PUT'])
 @login_required
 def transaction_api(transaction_id):
@@ -621,6 +492,8 @@ def transaction_api(transaction_id):
         if connection:
             connection.close()
 
+
+# Categories route(categories.html)
 @app.route('/categories', methods=['GET', 'POST'])
 @login_required
 def categories():
@@ -660,6 +533,7 @@ def categories():
         if connection:
             connection.close()
 
+# Profile route(profile.html)
 @app.route('/profile', methods=['GET', 'POST'])
 @login_required
 def profile():
@@ -743,6 +617,7 @@ def profile():
         if connection:
             connection.close()
 
+# Delete profile route(delete_profile.html)
 @app.route('/delete_profile', methods=['POST'])
 @login_required
 def delete_profile():
@@ -799,6 +674,7 @@ def delete_profile():
         if connection:
             connection.close()
 
+# Logout route(logout.html)
 @app.route('/logout')
 @login_required
 def logout_page():
@@ -828,6 +704,7 @@ def delete_transaction(transaction_id):
         if connection:
             connection.close()
 
+# Delete category route(delete_category.html)
 @app.route('/api/categories/<int:category_id>', methods=['DELETE'])
 @login_required
 def delete_category(category_id):
@@ -849,6 +726,7 @@ def delete_category(category_id):
         if connection:
             connection.close()
 
+# Dashboard route(dashboard.html)
 @app.route('/dashboard')
 @login_required
 def dashboard():
@@ -1050,6 +928,7 @@ def dashboard():
         flash('Database connection error. Please try again later.', 'error')
         return redirect(url_for('index'))
 
+# Budget route(budget.html)
 @app.route('/budget', methods=['GET', 'POST'])
 @login_required
 def budget():
@@ -1186,6 +1065,7 @@ def budget():
         if connection:
             connection.close()
 
+# Delete budget route(delete_budget.html)
 @app.route('/api/budget/<int:category_id>', methods=['DELETE'])
 @login_required
 def delete_budget(category_id):
@@ -1226,6 +1106,7 @@ def parse_flexible_date(spoken_date):
         raise ValueError(f"Could not parse date from '{spoken_date}'")
     return parsed
 
+# Voice transaction route
 @app.route('/voice_transaction', methods=['POST'])
 @login_required
 def voice_transaction():
@@ -1442,7 +1323,7 @@ def parse_gemini_suggestions(raw_suggestions):
             }]
         return []
 
-
+# Suggestions route(suggestions.html)
 @app.route('/suggestions')
 @login_required
 def suggestions():
@@ -1504,6 +1385,7 @@ def suggestions():
         if connection:
             connection.close()
 
+# Search transaction route
 @app.route('/api/transactions/search')
 @login_required
 def search_transactions():
