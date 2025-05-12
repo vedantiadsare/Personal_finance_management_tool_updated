@@ -403,7 +403,7 @@
                 <div class="modal-body">
                     <input type="hidden" name="transaction_id" id="transaction_id">
                     <div class="mb-3">
-                        <label for="transaction_type" class="form-label">Type</label>
+                        <label for="transaction_type" class="form-label">Type <span style="color:red">*</span></label>
                         <select class="form-select" id="transaction_type" name="transaction_type" required>
                             <option value="">Select type</option>
                             <option value="income">Income</option>
@@ -411,7 +411,7 @@
                         </select>
                     </div>
                     <div class="col-md-4 mb-3">
-                        <label for="amount" class="form-label">Amount</label>
+                        <label for="amount" class="form-label">Amount <span style="color:red">*</span></label>
                         <div class="input-group">
                             <span class="input-group-text">₹</span>
                             <input type="number" class="form-control" id="amount" name="amount" 
@@ -419,15 +419,15 @@
                         </div>
                     </div>
                     <div class="mb-3">
-                        <label for="description" class="form-label">Description</label>
+                        <label for="description" class="form-label">Description <span style="color:red">*</span></label>
                         <input type="text" class="form-control" id="description" name="description" required>
                     </div>
                     <div class="mb-3">
-                        <label for="date" class="form-label">Date</label>
+                        <label for="date" class="form-label">Date <span style="color:red">*</span></label>
                         <input type="date" class="form-control" id="date" name="date" required>
                     </div>
                     <div class="mb-3">
-                        <label for="payment_method" class="form-label">Payment Method</label>
+                        <label for="payment_method" class="form-label">Payment Method <span style="color:red">*</span></label>
                         <select class="form-select" id="payment_method" name="payment_method" required>
                             <option value="">Select payment method</option>
                             <option value="Cash">Cash</option>
@@ -436,7 +436,7 @@
                         </select>
                     </div>
                     <div class="mb-3">
-                        <label for="category_id" class="form-label">Category</label>
+                        <label for="category_id" class="form-label">Category <span style="color:red">*</span></label>
                         <select class="form-select" id="category_id" name="category_id" required>
                             <option value="">Select a category</option>
                             <optgroup label="Income Categories" id="income-categories">

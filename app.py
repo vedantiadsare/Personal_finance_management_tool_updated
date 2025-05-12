@@ -210,6 +210,11 @@ def register_page():
         password = request.form.get('password')
         confirm_password = request.form.get('confirm_password')
 
+        # Username must be alphanumeric and not only numbers or only letters
+        if not re.match(r'^(?=.*[a-zA-Z])(?=.*\d)[a-zA-Z\d]+$', username):
+            flash('Username must be alphanumeric and contain both letters and numbers.', 'danger')
+            return render_template('register.html')
+
         # To Check password strength
         if len(password) < 8:
             flash('Password must be at least 8 characters long', 'danger')
@@ -731,202 +736,180 @@ def delete_category(category_id):
 @login_required
 def dashboard():
     connection = get_db_connection()
-    if connection:
-        try:
-            cursor = connection.cursor(dictionary=True)
-            
-            # Get total income and expenses
-            cursor.execute('''
-                SELECT 
-                    SUM(CASE WHEN c.type = 'income' THEN t.amount ELSE 0 END) as total_income,
-                    SUM(CASE WHEN c.type = 'expense' THEN t.amount ELSE 0 END) as total_expenses
-                FROM transactions t
-                JOIN categories c ON t.category_id = c.id
-                WHERE t.user_id = %s
-            ''', (current_user.id,))
-            totals = cursor.fetchone()
-            
-            # Get monthly data for charts
-            cursor.execute('''
-                SELECT 
-                    DATE_FORMAT(t.date, '%%Y-%%m') as month,
-                    SUM(CASE WHEN c.type = 'income' THEN t.amount ELSE 0 END) as income,
-                    SUM(CASE WHEN c.type = 'expense' THEN t.amount ELSE 0 END) as expenses
-                FROM transactions t
-                JOIN categories c ON t.category_id = c.id
-                WHERE t.user_id = %s
-                GROUP BY DATE_FORMAT(t.date, '%%Y-%%m')
-                ORDER BY month DESC
-                LIMIT 12
-            ''', (current_user.id,))
-            monthly_data = cursor.fetchall()
-            
-            # Calculate monthly savings
-            if monthly_data:
-                latest_month = monthly_data[0]
-                monthly_savings = (latest_month.get('income', 0) or 0) - (latest_month.get('expenses', 0) or 0)
+    if not connection:
+        flash('Database connection error', 'danger')
+        return redirect(url_for('index'))
+    try:
+        cursor = connection.cursor(dictionary=True)
+        today = datetime.now()
+        current_month = today.strftime('%Y-%m')
+        previous_month = (today.replace(day=1) - timedelta(days=1)).strftime('%Y-%m')
+
+        # Get all transactions for the user
+        cursor.execute('''
+            SELECT t.*, c.name as category_name, c.type as category_type
+            FROM transactions t
+            JOIN categories c ON t.category_id = c.id
+            WHERE t.user_id = %s
+            ORDER BY t.date DESC, t.created_at DESC
+        ''', (current_user.id,))
+        all_transactions = cursor.fetchall()
+        print('All transactions:', all_transactions)
+
+        # Group transactions by month
+        from collections import defaultdict
+        def get_month_key(date_val):
+            if hasattr(date_val, 'strftime'):
+                return date_val.strftime('%Y-%m')
             else:
-                monthly_savings = 0
-            
-            # Get recent transactions
+                s = str(date_val)
+                # Handles both 'YYYY-MM-DD' and 'YYYY-M-D'
+                parts = s.split('-')
+                if len(parts) >= 2:
+                    year = parts[0]
+                    month = parts[1].zfill(2)
+                    return f"{year}-{month}"
+                return s[:7]
+        month_data = defaultdict(lambda: {'income': 0, 'expenses': 0})
+        for tx in all_transactions:
+            month = get_month_key(tx['date'])
+            if tx['category_type'] == 'income':
+                month_data[month]['income'] += float(tx['amount'])
+            elif tx['category_type'] == 'expense':
+                month_data[month]['expenses'] += float(tx['amount'])
+        months_sorted = sorted(month_data.keys(), reverse=True)[:12][::-1]
+        monthly_data = [
+            {
+                'month': m,
+                'income': month_data[m]['income'],
+                'expenses': month_data[m]['expenses']
+            } for m in months_sorted
+        ]
+        print('Monthly data:', monthly_data)
+
+        current_month_totals = {
+            'current_month_income': month_data.get(current_month, {}).get('income', 0),
+            'current_month_expenses': month_data.get(current_month, {}).get('expenses', 0)
+        }
+        previous_month_totals = {
+            'previous_month_income': month_data.get(previous_month, {}).get('income', 0),
+            'previous_month_expenses': month_data.get(previous_month, {}).get('expenses', 0)
+        }
+        current_month_savings = current_month_totals['current_month_income'] - current_month_totals['current_month_expenses']
+        previous_month_savings = previous_month_totals['previous_month_income'] - previous_month_totals['previous_month_expenses']
+        recent_transactions = all_transactions[:5]
+
+        # --- Month-wise expense categories ---
+        expense_categories_by_month = defaultdict(list)
+        for m in months_sorted:
             cursor.execute('''
-                SELECT t.*, c.name as category_name, c.type as category_type
+                SELECT c.name, COALESCE(SUM(t.amount), 0) as total, COUNT(*) as count
                 FROM transactions t
                 JOIN categories c ON t.category_id = c.id
-                WHERE t.user_id = %s
-                ORDER BY t.date DESC, t.created_at DESC
-                LIMIT 5
-            ''', (current_user.id,))
-            recent_transactions = cursor.fetchall()
-        
-            # Get category breakdown
-            cursor.execute('''
-                SELECT 
-                    c.name,
-                    c.type,
-                    SUM(t.amount) as total,
-                    COUNT(*) as count,
-                    ROUND(
-                        (SUM(t.amount) / NULLIF(
-                            (SELECT SUM(amount) 
-                            FROM transactions t2 
-                            JOIN categories c2 ON t2.category_id = c2.id 
-                            WHERE t2.user_id = %s AND c2.type = c.type), 0
-                        ) * 100
-                    ), 2) as percentage
-                FROM transactions t
-                JOIN categories c ON t.category_id = c.id
-                WHERE t.user_id = %s
-                GROUP BY c.id, c.name, c.type
+                WHERE t.user_id = %s AND c.type = 'expense' AND DATE_FORMAT(CAST(t.date AS DATE), '%Y-%m') = %s
+                GROUP BY c.id, c.name
                 HAVING total > 0
                 ORDER BY total DESC
-            ''', (current_user.id, current_user.id))
-            categories = cursor.fetchall()
-            
-            # Separate income and expense categories
-            income_categories = [c for c in categories if c['type'] == 'income']
-            expense_categories = [c for c in categories if c['type'] == 'expense']
-            
-            # Get budget information
+            ''', (current_user.id, m))
+            cats = cursor.fetchall()
+            total_exp = sum(c['total'] for c in cats)
+            for c in cats:
+                c['percentage'] = round((c['total'] / total_exp) * 100, 2) if total_exp > 0 else 0
+            expense_categories_by_month[m] = cats
+        print('Expense categories by month:', dict(expense_categories_by_month))
+
+        # --- Month-wise payment method stats ---
+        payment_methods_by_month = defaultdict(list)
+        for m in months_sorted:
             cursor.execute('''
-                SELECT c.id, c.name, 
-                       COALESCE(g.target_amount, 0) as target_amount,
-                       COALESCE(g.period, 'monthly') as period,
-                       COALESCE(SUM(t.amount), 0) as spent,
-                       MIN(t.date) as first_transaction,
-                       MAX(t.date) as last_transaction
-                FROM categories c
-                LEFT JOIN budget_goals g ON c.id = g.category_id AND g.user_id = %s
-                LEFT JOIN transactions t ON c.id = t.category_id AND t.user_id = %s
-                WHERE c.user_id = %s
-                GROUP BY c.id, c.name, g.target_amount, g.period
-                ORDER BY c.name
-            ''', (current_user.id, current_user.id, current_user.id))
-            
-            budget_categories = cursor.fetchall()
-            
-            # Get payment method distribution
-            cursor.execute('''
-                SELECT payment_method, COUNT(*) as count
+                SELECT COALESCE(payment_method, 'Other') as payment_method, COUNT(*) as count
                 FROM transactions
-                WHERE user_id = %s
+                WHERE user_id = %s AND DATE_FORMAT(CAST(date AS DATE), '%Y-%m') = %s
                 GROUP BY payment_method
-            ''', (current_user.id,))
-            payment_method_stats = cursor.fetchall()
-            
-            # Add budget notifications
-            for category in budget_categories:
-                if category['target_amount'] > 0:
-                    # Calculate actual percentage for notifications
-                    actual_percentage = (category['spent'] / category['target_amount']) * 100
-                    
-                    # Calculate date range based on period
-                    today = datetime.now().date()
-                    if category['period'] == 'weekly':
-                        start_of_period = today - timedelta(days=today.weekday())
-                        end_of_period = start_of_period + timedelta(days=6)
-                        category['date_range'] = f"{start_of_period.strftime('%d %b')} - {end_of_period.strftime('%d %b %Y')}"
-                    elif category['period'] == 'monthly':
-                        start_of_period = today.replace(day=1)
-                        end_of_period = (start_of_period + timedelta(days=32)).replace(day=1) - timedelta(days=1)
-                        category['date_range'] = f"{start_of_period.strftime('%d %b')} - {end_of_period.strftime('%d %b %Y')}"
-                    elif category['period'] == 'yearly':
-                        start_of_period = today.replace(month=1, day=1)
-                        end_of_period = today.replace(month=12, day=31)
-                        category['date_range'] = f"{start_of_period.strftime('%d %b %Y')} - {end_of_period.strftime('%d %b %Y')}"
-                    else:  # daily
-                        start_of_period = end_of_period = today
-                        category['date_range'] = today.strftime('%d %b %Y')
-                    
-                    # Query spent for this category and period
-                    cursor.execute('''
-                        SELECT COALESCE(SUM(amount), 0) as spent
-                        FROM transactions
-                        WHERE user_id = %s AND category_id = %s AND date >= %s AND date <= %s
-                    ''', (current_user.id, category['id'], start_of_period, end_of_period))
-                    spent_result = cursor.fetchone()
-                    category['spent'] = spent_result['spent'] if spent_result else 0
-                    category['remaining'] = category['target_amount'] - category['spent']
-                    if category['target_amount'] > 0:
-                        # Calculate actual percentage for notifications
-                        actual_percentage = (category['spent'] / category['target_amount']) * 100
-                        # Cap the percentage at 100% for the progress bar
-                        category['percentage'] = min(100, actual_percentage)
-                        # Add budget notifications
-                        if actual_percentage >= 90:
-                            messages_90 = [
-                                'Budget Alert: You have reached 90% of your budget limit. Please review your spending.',
-                                'Budget Warning: 90% of your allocated budget has been utilized. Consider adjusting your expenses.',
-                                'Budget Notification: Your spending has reached 90% of the budget threshold.',
-                                'Budget Alert: You are approaching your budget limit with 90% utilization.'
-                            ]
-                            if category['spent'] > category['target_amount']:
-                                amount_exceeded = category['spent'] - category['target_amount']
-                                flash(f'Budget Alert! {random.choice(messages_90)} You\'ve exceeded your {category["period"]} budget for {category["name"]} ({category["date_range"]}) by ₹{amount_exceeded:.2f}!', 'budget')
-                            else:
-                                flash(f'Budget Alert! {random.choice(messages_90)} You\'ve spent ₹{category["spent"]:.2f} out of ₹{category["target_amount"]:.2f} for {category["name"]} ({category["date_range"]})!', 'budget')
-                        elif actual_percentage >= 80:
-                            messages_80 = [
-                                'Budget Notice: You have utilized 80% of your budget. Please monitor your spending carefully.',
-                                'Budget Update: 80% of your budget has been spent. Consider reviewing your expenses.',
-                                'Budget Alert: Your spending has reached 80% of the allocated budget.',
-                                'Budget Warning: You are approaching 80% of your budget limit.'
-                            ]
-                            flash(f'Budget Alert! {random.choice(messages_80)} You\'ve spent ₹{category["spent"]:.2f} out of ₹{category["target_amount"]:.2f} for {category["name"]} ({category["date_range"]})!', 'budget')
-                        elif actual_percentage >= 50:
-                            messages_50 = [
-                                'Budget Update: You have spent more than 50% of your allocated budget.',
-                                'Budget Notice: More than half of your budget has been utilized.',
-                                'Budget Status: You have crossed the halfway point of your budget.',
-                                'Budget Update: Spending is now above 50% of your budget.'
-                            ]
-                            flash(f'Budget Alert! {random.choice(messages_50)} You\'ve spent ₹{category["spent"]:.2f} out of ₹{category["target_amount"]:.2f} for {category["name"]} ({category["date_range"]})', 'budget')
-                    else:
-                        category['percentage'] = 0
-                        category['date_range'] = ''
-            
-            return render_template('dashboard.html',
-                                totals=totals,
-                                monthly_data=monthly_data,
-                                recent_transactions=recent_transactions,
-                                income_categories=income_categories,
-                                expense_categories=expense_categories,
-                                monthly_savings=monthly_savings,
-                                categories=budget_categories,
-                                payment_method_stats=payment_method_stats)
-            
-        except Exception as e:
-            print(f"Error in dashboard route: {e}")
-            flash('An error occurred. Please try again.', 'error')
-            return redirect(url_for('index'))
-        finally:
-            if 'cursor' in locals():
-                cursor.close()
-            if connection:
-                connection.close()
-    else:
-        flash('Database connection error. Please try again later.', 'error')
+            ''', (current_user.id, m))
+            payment_methods_by_month[m] = cursor.fetchall()
+        print('Payment methods by month:', dict(payment_methods_by_month))
+
+        # Current month categories for cards
+        cursor.execute('''
+            SELECT c.name, c.type, COALESCE(SUM(t.amount), 0) as total, COUNT(*) as count
+            FROM transactions t
+            JOIN categories c ON t.category_id = c.id
+            WHERE t.user_id = %s AND DATE_FORMAT(CAST(t.date AS DATE), '%Y-%m') = %s
+            GROUP BY c.id, c.name, c.type
+            HAVING total > 0
+            ORDER BY total DESC
+        ''', (current_user.id, current_month))
+        categories = cursor.fetchall()
+        print('Current month categories:', categories)
+        total_income = sum(c['total'] for c in categories if c['type'] == 'income')
+        total_expense = sum(c['total'] for c in categories if c['type'] == 'expense')
+        for c in categories:
+            if c['type'] == 'income' and total_income > 0:
+                c['percentage'] = round((c['total'] / total_income) * 100, 2)
+            elif c['type'] == 'expense' and total_expense > 0:
+                c['percentage'] = round((c['total'] / total_expense) * 100, 2)
+            else:
+                c['percentage'] = 0
+        income_categories = [c for c in categories if c['type'] == 'income']
+        expense_categories = [c for c in categories if c['type'] == 'expense']
+
+        # Payment method distribution for current month (for cards)
+        cursor.execute('''
+            SELECT COALESCE(payment_method, 'Other') as payment_method, COUNT(*) as count
+            FROM transactions
+            WHERE user_id = %s AND DATE_FORMAT(CAST(date AS DATE), '%Y-%m') = %s
+            GROUP BY payment_method
+        ''', (current_user.id, current_month))
+        payment_method_stats = cursor.fetchall()
+        print('Payment method stats:', payment_method_stats)
+
+        # Budget info for all categories
+        cursor.execute('''
+            SELECT c.id, c.name, 
+                   COALESCE(g.target_amount, 0) as target_amount,
+                   COALESCE(g.period, 'monthly') as period,
+                   COALESCE(SUM(t.amount), 0) as spent,
+                   MIN(t.date) as first_transaction,
+                   MAX(t.date) as last_transaction
+            FROM categories c
+            LEFT JOIN budget_goals g ON c.id = g.category_id AND g.user_id = %s
+            LEFT JOIN transactions t ON c.id = t.category_id AND t.user_id = %s AND DATE_FORMAT(CAST(t.date AS DATE), '%Y-%m') = %s
+            WHERE c.user_id = %s
+            GROUP BY c.id, c.name, g.target_amount, g.period
+            ORDER BY c.name
+        ''', (current_user.id, current_user.id, current_month, current_user.id))
+        budget_categories = cursor.fetchall()
+        print('Budget categories:', budget_categories)
+
+        return render_template('dashboard.html',
+            current_month_totals=current_month_totals,
+            previous_month_totals=previous_month_totals,
+            monthly_data=monthly_data,
+            recent_transactions=recent_transactions,
+            income_categories=income_categories,
+            expense_categories=expense_categories,
+            current_month_savings=current_month_savings,
+            previous_month_savings=previous_month_savings,
+            categories=budget_categories,
+            payment_method_stats=payment_method_stats,
+            current_month=current_month,
+            previous_month=previous_month,
+            totals={'total_income': total_income, 'total_expenses': total_expense},
+            monthly_savings=current_month_savings,
+            expense_categories_by_month=dict(expense_categories_by_month),
+            payment_methods_by_month=dict(payment_methods_by_month),
+            months_sorted=months_sorted
+        )
+    except Exception as e:
+        print(f"Error in dashboard route: {e}")
+        flash('An error occurred while loading the dashboard. Please try again.', 'error')
         return redirect(url_for('index'))
+    finally:
+        if 'cursor' in locals():
+            cursor.close()
+        if connection:
+            connection.close()
 
 # Budget route(budget.html)
 @app.route('/budget', methods=['GET', 'POST'])
@@ -1043,7 +1026,6 @@ def budget():
                 elif actual_percentage >= 50:
                     messages_50 = [
                         'Budget Update: You have spent more than 50% of your allocated budget.',
-                        'Budget Update: You have spent 50% of your allocated budget.',
                         'Budget Notice: Half of your budget has been utilized.',
                         'Budget Status: 50% of your budget has been spent.',
                         'Budget Update: You have reached the halfway point of your budget.'
