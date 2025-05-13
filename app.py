@@ -18,6 +18,10 @@ from datetime import datetime
 import dateparser
 import json
 import traceback
+from flask_mail import Message
+from flask_mail import Mail
+from itsdangerous import URLSafeTimedSerializer
+
 
 # Loading environment variables from .env file
 load_dotenv()
@@ -27,6 +31,11 @@ app = Flask(__name__)
 # Configuration
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'your-secret-key-here')
 
+app.config['MAIL_SERVER'] = 'smtp.gmail.com'
+app.config['MAIL_PORT'] = 587
+app.config['MAIL_USE_TLS'] = True
+app.config['MAIL_USERNAME'] = 'moin.tamboli@jadeglobal.com'
+mail = Mail(app)
 
 # Initialize extensions
 bcrypt = Bcrypt(app)
@@ -156,6 +165,91 @@ def load_user(user_id):
             if connection:
                 connection.close()
     return None
+
+
+
+def generate_reset_token(email):
+    serializer = URLSafeTimedSerializer(app.config['SECRET_KEY'])
+    return serializer.dumps(email, salt='password-reset-salt')
+
+def verify_reset_token(token, expiration=3600):
+    serializer = URLSafeTimedSerializer(app.config['SECRET_KEY'])
+    try:
+        email = serializer.loads(token, salt='password-reset-salt', max_age=expiration)
+    except:
+        return None
+    return email
+
+def update_password(email, hashed_password):
+    connection = get_db_connection()
+    if connection:
+        try:
+            cursor = connection.cursor()
+            cursor.execute("UPDATE users SET password_hash = %s WHERE email = %s", 
+                           (hashed_password, email))
+            connection.commit()
+        except Exception as e:
+            print(f"Error updating password: {e}")
+        finally:
+            cursor.close()
+            connection.close()
+
+
+@app.route('/forgot-password', methods=['GET', 'POST'])
+def forgot_password():
+    if request.method == 'POST':
+        email = request.form.get('email')
+        connection = get_db_connection()
+        
+        if connection:
+            try:
+                cursor = connection.cursor(dictionary=True)
+                cursor.execute("SELECT * FROM users WHERE email = %s", (email,))
+                user_data = cursor.fetchone()
+                
+                if user_data:
+                    token = generate_reset_token(email)
+                    reset_url = url_for('reset_password', token=token, _external=True)
+                    
+                    msg = Message('Reset Your Password',
+                                  sender=app.config['MAIL_USERNAME'],
+                                  recipients=[email])
+                    msg.body = f'Click the link to reset your password: {reset_url}'
+                    mail.send(msg)
+                    
+                    flash('Check your email for a reset link.', 'info')
+                    return redirect(url_for('login'))
+                else:
+                    flash('If the email is registered, a reset link has been sent.', 'info')
+            except Exception as e:
+                print(f"Error sending reset email: {e}")
+                flash('Error processing request. Please try again.', 'danger')
+            finally:
+                cursor.close()
+                connection.close()
+        else:
+            flash('Database connection error.', 'danger')
+    
+    return render_template('forgot_password.html')
+
+
+@app.route('/reset-password/<token>', methods=['GET', 'POST'])
+def reset_password(token):
+    email = verify_reset_token(token)
+    if not email:
+        flash('Invalid or expired token.', 'danger')
+        return redirect(url_for('forgot_password'))
+
+    if request.method == 'POST':
+        new_password = request.form.get('password')
+        hashed_password = bcrypt.generate_password_hash(new_password).decode('utf-8')
+        
+        update_password(email, hashed_password)
+        flash('Password updated successfully. Please log in.', 'success')
+        return redirect(url_for('login'))
+
+    return render_template('reset_password.html')
+
 
 # Root route(index.html)
 @app.route('/')
