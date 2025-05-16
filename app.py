@@ -293,6 +293,22 @@ def login():
     
     return render_template('login.html')
 
+def generate_username_suggestion(base_username, cursor):
+    """Generate a suggested username by appending a number if the base username exists."""
+    # Check if the base username exists
+    cursor.execute("SELECT username FROM users WHERE username = %s", (base_username,))
+    if not cursor.fetchone():
+        return base_username
+    
+    # Try appending numbers until we find an available username
+    counter = 1
+    while True:
+        suggested_username = f"{base_username}{counter}"
+        cursor.execute("SELECT username FROM users WHERE username = %s", (suggested_username,))
+        if not cursor.fetchone():
+            return suggested_username
+        counter += 1
+
 @app.route('/register', methods=['GET', 'POST'])
 def register_page():
     if current_user.is_authenticated:
@@ -304,9 +320,9 @@ def register_page():
         password = request.form.get('password')
         confirm_password = request.form.get('confirm_password')
 
-        # Username must be alphanumeric and not only numbers or only letters
-        if not re.match(r'^(?=.*[a-zA-Z])(?=.*\d)[a-zA-Z\d]+$', username):
-            flash('Username must be alphanumeric and contain both letters and numbers.', 'danger')
+        # Username validation - allow alphabetic names for first registration
+        if not re.match(r'^[a-zA-Z]+$', username) and not re.match(r'^(?=.*[a-zA-Z])(?=.*\d)[a-zA-Z\d]+$', username):
+            flash('Username must be either alphabetic only or alphanumeric.', 'danger')
             return render_template('register.html')
 
         # To Check password strength
@@ -327,11 +343,12 @@ def register_page():
             try:
                 cursor = connection.cursor(dictionary=True)
 
-                # Check if username exists
+                # Check if username exists and generate suggestion if it does
                 cursor.execute("SELECT * FROM users WHERE username = %s", (username,))
                 if cursor.fetchone():
-                    flash('Username already exists', 'danger')
-                    return render_template('register.html')
+                    suggested_username = generate_username_suggestion(username, cursor)
+                    flash(f'Username already exists. Try using: {suggested_username}', 'warning')
+                    return render_template('register.html', suggested_username=suggested_username)
 
                 # Check if email exists
                 cursor.execute("SELECT * FROM users WHERE email = %s", (email,))
